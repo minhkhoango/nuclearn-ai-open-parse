@@ -24,6 +24,7 @@ class UnitableArgsDict(TypedDict, total=False):
 
 class TableTransformersArgsDict(TypedDict, total=False):
     parsing_algorithm: Literal["table-transformers"]
+    detection_model_id: str
     min_table_confidence: float
     min_cell_confidence: float
     table_output_format: Literal["markdown", "html"]

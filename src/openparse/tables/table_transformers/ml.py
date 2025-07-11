@@ -1,13 +1,13 @@
 import logging
 import time
-from typing import Any, List
+from typing import Any, Dict, List, Tuple, Literal
 
 import torch  # type: ignore
 from PIL import Image  # type: ignore
-from torchvision import transforms  # type: ignore
 from transformers import (
-    AutoModelForObjectDetection,  # type: ignore
-    TableTransformerForObjectDetection,  # type: ignore
+    AutoImageProcessor, 
+    AutoModelForObjectDetection,
+    TableTransformerForObjectDetection,
 )
 
 # type: ignore
@@ -27,61 +27,83 @@ from .geometry import (
     calc_bbox_intersection,
 )
 from .schemas import (
-    _Table,
-    _TableCellModelOutput,
-    _TableDataCell,
-    _TableHeader,
-    _TableHeaderCell,
-    _TableModelOutput,
-    _TableRow,
+    Table,
+    TableCellModelOutput,
+    TableDataCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
 )
 
-t0 = time.time()
-device = config.get_device()
+# ================================
+# === GLOBAL SETUP & CONSTANTS ===
+# ================================
+t0: float = time.time()
+device: Literal['cuda'] | Literal['cpu'] = config.get_device()
+Size = Tuple[int, int]
 
 
-class MaxResize:
-    def __init__(self, max_size=800):
-        self.max_size = max_size
+# ==========================
+# === ML MODEL ABSTRACTION ===
+# ==========================
+class TableDetector:
+    """
+    A wrapper for loading and running table detection models.
+    """
+    
+    model: AutoModelForObjectDetection
+    processor: AutoImageProcessor
+    device: str
+    
+    def __init__(self, model_id: str, device: str) -> None:
+        self.device: str = device
+        print(f"Loading table detection model: {model_id}")
+        self.processor = AutoImageProcessor.from_pretrained(model_id)
+        self.model = AutoModelForObjectDetection.from_pretrained(model_id).to(self.device)
 
-    def __call__(self, image):
-        width, height = image.size
-        current_max_size = max(width, height)
-        scale = self.max_size / current_max_size
-        resized_image = image.resize(
-            (int(round(scale * width)), int(round(scale * height)))
-        )
+    def detect(self, image: Image.Image, threshold: float) -> List[BBox]:
+        """
+        Runs table detection on a PIL image.
+        Returns a list of bounding boxes for detected tables.
+        """
+        inputs: Dict[str, torch.Tensor] = self.processor(
+            images=image, return_tensors="pt"
+        ).to(self.device)
 
-        return resized_image
+        with torch.no_grad():
+            outputs: Any = self.model(**inputs)
+
+        target_sizes: torch.Tensor = torch.tensor([image.size[::-1]]).to(self.device)
+        results: Dict[str, torch.Tensor] = self.processor.post_process_object_detection(
+            outputs, threshold=threshold, target_sizes=target_sizes
+        )[0]
+
+        tables_found: List[BBox] = []
+        scores: torch.Tensor = results["scores"]
+        labels: torch.Tensor = results["labels"]
+        boxes: torch.Tensor = results["boxes"]
+
+        for _score, _label, box_tensor in zip(scores, labels, boxes):
+            box: List[float] = [round(i, 2) for i in box_tensor.tolist()]
+            tables_found.append(tuple(box))  # type: ignore
+
+        return tables_found
 
 
-detection_model = AutoModelForObjectDetection.from_pretrained(
-    "microsoft/table-transformer-detection",
-    revision="no_timm",
-).to(device)
+# ==================================
+# === MODEL LOADING (STRUCTURE) ===
+# ==================================
 
-structure_model = TableTransformerForObjectDetection.from_pretrained(
-    "microsoft/table-transformer-structure-recognition",
-    revision="no_timm",
-).to(device)
-
-
-detection_transform = transforms.Compose(
-    [
-        MaxResize(800),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ]
+# --- This model recognizes the internal structure (rows, cells) of a table ---
+STRUCTURE_MODEL_ID: str = "microsoft/table-transformer-structure-recognition"
+structure_processor: AutoImageProcessor = AutoImageProcessor.from_pretrained(
+    STRUCTURE_MODEL_ID, revision="no_timm"
 )
-
-structure_transform = transforms.Compose(
-    [
-        MaxResize(1000),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ]
+structure_model: TableTransformerForObjectDetection = (
+    TableTransformerForObjectDetection.from_pretrained(
+        STRUCTURE_MODEL_ID, revision="no_timm"
+    ).to(device)
 )
-
 
 logging.info(f"Models loaded successfully 🚀: {time.time() - t0:.2f}s")
 
@@ -106,217 +128,151 @@ def _box_cxcywh_to_xyxy(x: torch.Tensor) -> torch.Tensor:
     - A tensor of shape (N, 4) representing N bounding boxes in x_min, y_min, x_max, y_max format.
     """
     x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    b: List[torch.Tensor] = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
     return torch.stack(b, dim=1)
 
+# ==================================
+# === STRUCTURED CONTENT PARSING ===
+# ==================================
 
-def _rescale_bboxes(out_bbox: torch.Tensor, size: Size) -> torch.Tensor:
+def _calculate_area(bbox: BBox | None) -> float:
+    if bbox is None:
+        return 0
+    width: float = bbox[2] - bbox[0]
+    height: float = bbox[3] - bbox[1]
+    return width * height
+
+
+def _is_overlapping_with_headers(
+    cell_bbox: BBox, headers: List[TableHeader], overlap_threshold: float = 0.9
+) -> bool:
     """
-    Rescales bounding boxes to the original image size.
-
-    Parameters:
-    - out_bbox: A tensor of bounding boxes in normalized format (relative to current size).
-    - size: The target size (width, height) as a tuple of integers.
-
-    Returns:
-    - A tensor of rescaled bounding boxes in the target size.
+    Check if a given cell's bounding box overlaps with any of the header cells' bounding boxes.
+    If the overlap area is above the threshold percentage of the cell's area, return True.
     """
-    width, height = size
-    boxes = _box_cxcywh_to_xyxy(out_bbox)
-    boxes = boxes * torch.tensor([width, height, width, height], dtype=torch.float32)
-    return boxes
+    cell_area: float = _calculate_area(cell_bbox)
+    if cell_area == 0:
+        return False
 
+    for header in headers:
+        for hcell in header.cells:
+            intersection: BBox | None = calc_bbox_intersection(cell_bbox, hcell.bbox)
+            if intersection:
+                intersection_area: float = _calculate_area(intersection)
+                if (intersection_area / cell_area) > overlap_threshold:
+                    return True
+    return False
 
-def _outputs_to_objects(outputs: Any, img_size: Size, id2label: dict):
-    m = outputs.logits.softmax(-1).max(-1)
-    pred_labels = list(m.indices.detach().cpu().numpy())[0]
-    pred_scores = list(m.values.detach().cpu().numpy())[0]
-    pred_bboxes = outputs["pred_boxes"].detach().cpu()[0]
-    pred_bboxes = [elem.tolist() for elem in _rescale_bboxes(pred_bboxes, img_size)]
-
-    objects = []
-    for label, score, bbox in zip(pred_labels, pred_scores, pred_bboxes):
-        class_label = id2label[int(label)]
-        if not class_label == "no object":
-            objects.append(
-                {
-                    "label": class_label,
-                    "score": float(score),
-                    "bbox": [float(elem) for elem in bbox],
-                }
+def _preprocess_header_cells(
+    header_rows: List[TableCellModelOutput],
+    cols: List[TableCellModelOutput],
+    image_size: Size,
+    page_size: Size,
+) -> List[TableHeader]:
+    """Processes detected header cells."""
+    header_objs: List[TableHeader] = []
+    for header_row in header_rows:
+        header_row_cells: List[TableHeaderCell] = []
+        for col in cols:
+            cell_bbox: BBox | None = calc_bbox_intersection(
+                header_row.bbox, col.bbox, safety_margin=5
             )
+            if cell_bbox:
+                pdf_cell_bbox: BBox = convert_img_cords_to_pdf_cords(
+                    cell_bbox, page_size, image_size
+                )
+                header_row_cells.append(TableHeaderCell(bbox=pdf_cell_bbox))
+        if header_row_cells:
+            header_objs.append(TableHeader(cells=header_row_cells))
+    return header_objs
 
-    return objects
 
-
-def _cell_outputs_to_objs(
-    outputs: Any, img_size: Size, id2label: dict
-) -> List[_TableCellModelOutput]:
-    clean_outputs = _outputs_to_objects(outputs, img_size, id2label)
-    cells = []
-    for cell in clean_outputs:
-        cells.append(
-            _TableCellModelOutput(
-                label=cell["label"],
-                confidence=cell["score"],
-                bbox=cell["bbox"],
+def _process_row_cells(
+    rows: List[TableCellModelOutput],
+    cols: List[TableCellModelOutput],
+    headers: List[TableHeader],
+    image_size: Size,
+    page_size: Size,
+) -> List[TableRow]:
+    """Processes detected data rows, avoiding overlaps with headers."""
+    data_rows: List[TableRow] = []
+    for row in rows:
+        row_cells: List[TableDataCell] = []
+        for col in cols:
+            cell_bbox: BBox | None = calc_bbox_intersection(
+                row.bbox, col.bbox, safety_margin=5
             )
-        )
+            if cell_bbox:
+                pdf_cell_bbox: BBox = convert_img_cords_to_pdf_cords(
+                    cell_bbox, page_size, image_size
+                )
+                if not _is_overlapping_with_headers(pdf_cell_bbox, headers):
+                    row_cells.append(TableDataCell(bbox=pdf_cell_bbox))
+        if row_cells:
+            data_rows.append(TableRow(cells=row_cells))
+    return data_rows
+
+
+def _structure_outputs_to_cells(
+    outputs: Any, img_size: Size, id2label: Dict[int, str]
+) -> List[TableCellModelOutput]:
+    """Converts raw structure model outputs to a list of TableCellModelOutput objects."""
+    logits: torch.Tensor = outputs.logits
+    bboxes: torch.Tensor = outputs.pred_boxes
+
+    # Post-process
+    m: torch.return_types.max = logits.softmax(-1).max(-1)
+    pred_labels: List[int] = m.indices.detach().cpu().numpy().tolist()[0]
+    pred_scores: List[float] = m.values.detach().cpu().numpy().tolist()[0]
+    pred_bboxes_raw: torch.Tensor = bboxes.detach().cpu()[0]
+
+    # Rescale bboxes
+    width, height = img_size
+    box_scaler: torch.Tensor = torch.tensor([width, height, width, height])
+    pred_bboxes_scaled: List[List[float]] = (
+        _box_cxcywh_to_xyxy(pred_bboxes_raw) * box_scaler
+    ).tolist()
+
+    cells: List[TableCellModelOutput] = []
+    for label_id, score, bbox in zip(pred_labels, pred_scores, pred_bboxes_scaled):
+        class_label: str = id2label.get(label_id, "no object")
+        if class_label != "no object":
+            cells.append(
+                TableCellModelOutput(
+                    label=class_label,  # type: ignore
+                    confidence=score,
+                    bbox=tuple(bbox),  # type: ignore
+                )
+            )
     return cells
-
-
-def _table_outputs_to_objs(
-    outputs: Any, img_size: Size, id2label: dict
-) -> List[_TableModelOutput]:
-    clean_outputs = _outputs_to_objects(outputs, img_size, id2label)
-    tables = []
-    for table in clean_outputs:
-        tables.append(
-            _TableModelOutput(
-                label=table["label"],
-                confidence=table["score"],
-                bbox=table["bbox"],
-            )
-        )
-    return tables
-
-
-def find_table_bboxes(
-    image: Image.Image, min_table_confidence: float
-) -> List[_TableModelOutput]:
-    pixel_values = detection_transform(image).unsqueeze(0).to(device)
-    with torch.no_grad():
-        outputs = detection_model(pixel_values)
-
-    detection_id2label = {
-        **detection_model.config.id2label,
-        len(detection_model.config.id2label): "no object",
-    }
-
-    detected_tables = _table_outputs_to_objs(outputs, image.size, detection_id2label)
-
-    tables = [t for t in detected_tables if t.confidence > min_table_confidence]
-
-    return tables
-
-
-####################################
-### === MANIPULATING RESULTS === ###
-####################################
 
 
 def table_from_model_outputs(
     image: Image.Image,
     page_size: Size,
     table_bbox: BBox,
-    table_cells: List[_TableCellModelOutput],
+    table_cells: List[TableCellModelOutput],
     min_cell_confidence: float,
-) -> "_Table":
-    headers = [
-        cell
-        for cell in table_cells
-        if cell.is_header and cell.confidence > min_cell_confidence
+) -> "Table":
+    """Constructs a _Table object from the processed model outputs."""
+    headers_raw: List[TableCellModelOutput] = [
+        cell for cell in table_cells if cell.is_header and cell.confidence > min_cell_confidence
     ]
-    rows = [
-        cell
-        for cell in table_cells
-        if cell.is_row and cell.confidence > min_cell_confidence
+    rows_raw: List[TableCellModelOutput] = [
+        cell for cell in table_cells if cell.is_row and cell.confidence > min_cell_confidence
     ]
-    cols = [
-        cell
-        for cell in table_cells
-        if cell.is_column and cell.confidence > min_cell_confidence
+    cols_raw: List[TableCellModelOutput] = [
+        cell for cell in table_cells if cell.is_column and cell.confidence > min_cell_confidence
     ]
 
-    header_objs = _preprocess_header_cells(headers, cols, image.size, page_size)
-    row_objs = _process_row_cells(rows, cols, header_objs, image.size, page_size)
+    header_objs: List[TableHeader] = _preprocess_header_cells(
+        headers_raw, cols_raw, image.size, page_size
+    )
+    row_objs: List[TableRow] = _process_row_cells(
+        rows_raw, cols_raw, header_objs, image.size, page_size
+    )
 
-    return _Table(bbox=table_bbox, headers=header_objs, rows=row_objs)
-
-
-def _preprocess_header_cells(
-    header_rows: List[_TableCellModelOutput],
-    cols: List[_TableCellModelOutput],
-    image_size: Size,
-    page_size: Size,
-) -> List[_TableHeader]:
-    header_cells = []
-    for header in header_rows:
-        header_row_cells = []
-        for col in cols:
-            cell_bbox = calc_bbox_intersection(header.bbox, col.bbox, safety_margin=5)
-            if cell_bbox:
-                cell_bbox = convert_img_cords_to_pdf_cords(
-                    cell_bbox, page_size, image_size
-                )
-                header_row_cells.append(
-                    _TableHeaderCell(
-                        bbox=cell_bbox,
-                    )
-                )
-        header_cells.append(_TableHeader(cells=header_row_cells))
-    return header_cells
-
-
-def _process_row_cells(
-    rows: List[_TableCellModelOutput],
-    cols: List[_TableCellModelOutput],
-    headers: List[_TableHeader],
-    image_size: Size,
-    page_size: Size,
-) -> List[_TableRow]:
-    """
-    Process row cells by checking against header cells for overlaps and converting coordinates.
-    """
-    data_cells = []
-    for row in rows:
-        row_cells = []
-        for col in cols:
-            cell_bbox = calc_bbox_intersection(row.bbox, col.bbox, safety_margin=5)
-
-            if cell_bbox:
-                cell_bbox_pdf = convert_img_cords_to_pdf_cords(
-                    cell_bbox, page_size, image_size
-                )
-
-                if not _is_overlapping_with_headers(cell_bbox_pdf, headers):
-                    row_cells.append(
-                        _TableDataCell(
-                            bbox=cell_bbox_pdf,
-                        )
-                    )
-        if row_cells:
-            data_cells.append(_TableRow(cells=row_cells))
-    return data_cells
-
-
-def calculate_area(bbox: BBox) -> float:
-    if bbox is None:
-        return 0
-    width = bbox[2] - bbox[0]
-    height = bbox[3] - bbox[1]
-    return width * height
-
-
-def _is_overlapping_with_headers(
-    cell_bbox: BBox, headers: List[_TableHeader], overlap_threshold: float = 0.9
-) -> bool:
-    """
-    Check if a given cell's bounding box overlaps with any of the header cells' bounding boxes.
-    If the overlap area is above the threshold percentage of the cell's area, return True.
-    """
-    cell_area = calculate_area(cell_bbox)
-
-    for header in headers:
-        for hcell in header.cells:
-            intersection = calc_bbox_intersection(cell_bbox, hcell.bbox)
-            if intersection:
-                intersection_area = calculate_area(intersection)
-                overlap_percentage = intersection_area / cell_area
-                if overlap_percentage > overlap_threshold:
-                    return True
-    return False
-
+    return Table(bbox=table_bbox, headers=header_objs, rows=row_objs)
 
 def get_table_content(
     page_dims: Size,
@@ -324,26 +280,40 @@ def get_table_content(
     table_bbox: BBox,
     min_cell_confidence: float,
     verbose: bool = False,
-) -> _Table:
-    OFFSET = 0.05
-    table_img = crop_img_with_padding(page_img, table_bbox, padding_pct=OFFSET)
-    structure_id2label = {
+) -> Table:
+    """
+    Crops a table from a page image, recognizes its structure, and returns a _Table object.
+    """
+    OFFSET: float = 0.05
+    table_img: Image.Image = crop_img_with_padding(
+        page_img, table_bbox, padding_pct=OFFSET
+    )
+    structure_id2label: Dict[int, str] = {
         **structure_model.config.id2label,
         len(structure_model.config.id2label): "no object",
     }
 
-    pixel_values_st = structure_transform(table_img).unsqueeze(0).to(device)
-    with torch.no_grad():
-        outputs_st = structure_model(pixel_values_st)
+    # Use the dedicated processor for the structure model
+    pixel_values_st: torch.Tensor = structure_processor(
+        table_img, return_tensors="pt"
+    ).pixel_values.to(device)
 
-    cells = _cell_outputs_to_objs(outputs_st, table_img.size, structure_id2label)
+    with torch.no_grad():
+        outputs_st: Any = structure_model(pixel_values_st)
+
+    # We need to re-implement the post-processing since we can't use the AutoProcessor's method here
+    # This requires the old helper functions, so we will define them locally or bring them back
+    # For now, let's assume a function that does this.
+    cells: List[TableCellModelOutput] = _structure_outputs_to_cells(
+        outputs_st, table_img.size, structure_id2label
+    )
 
     for cell in cells:
         cell.bbox = convert_croppped_cords_to_full_img_cords(
             padding_pct=OFFSET,
             cropped_image_size=table_img.size,
-            table_bbox=cell.bbox,
-            bbox=table_bbox,
+            table_bbox=table_bbox,
+            bbox=cell.bbox,
         )
 
     if verbose:

@@ -18,7 +18,11 @@ class TableTransformersArgs(BaseModel):
     parsing_algorithm: Literal["table-transformers"] = Field(
         default="table-transformers"
     )
-    min_table_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+    detection_model_id: str = Field(
+        default="TahaDouaji/detr-doc-table-detection",
+        description="The HuggingFace model ID for the table detection model.",
+    )
+    min_table_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
     min_cell_confidence: float = Field(default=0.95, ge=0.0, le=1.0)
     table_output_format: Literal["str", "markdown", "html"] = Field(default="html")
 
@@ -95,30 +99,38 @@ def _ingest_with_table_transformers(
     verbose: bool = False,
 ) -> List[TableElement]:
     try:
+        from openparse.config import config
         from openparse.tables.utils import doc_to_imgs
 
-        from .table_transformers.ml import find_table_bboxes, get_table_content
+        from .table_transformers.ml import TableDetector, get_table_content
     except ImportError as e:
         raise ImportError(
             "Table detection and extraction requires the `torch`, `torchvision` and `transformers` libraries to be installed.",
             e,
         ) from e
-    pdoc = doc.to_pymupdf_doc()  # type: ignore
+    # 1. Instantiate the detector with the model ID from the user's arguments
+    table_detector = TableDetector(model_id=args.detection_model_id, device=config.get_device())
+
+    pdoc = doc.to_pymupdf_doc()
     pdf_as_imgs = doc_to_imgs(pdoc)
 
     pages_with_tables = {}
     for page_num, img in enumerate(pdf_as_imgs):
-        pages_with_tables[page_num] = find_table_bboxes(img, args.min_table_confidence)
+        pages_with_tables[page_num] = table_detector.detect(img, args.min_table_confidence)
 
     tables = []
     for page_num, table_bboxes in pages_with_tables.items():
-        page = pdoc[page_num]
-        page_dims = (page.rect.width, page.rect.height)
+        page: fitz.Page = pdoc[page_num]
+        page_dims: Tuple[float, float] = (page.rect.width, page.rect.height)
+        
+        # The 'table_bbox' variable here IS the tuple, e.g., (x0, y0, x1, y1)
         for table_bbox in table_bboxes:
+            
+            # REMOVE .bbox from here
             table = get_table_content(
                 page_dims,
                 pdf_as_imgs[page_num],
-                table_bbox.bbox,
+                table_bbox, # <-- NO .bbox
                 args.min_cell_confidence,
                 verbose,
             )
@@ -131,17 +143,16 @@ def _ingest_with_table_transformers(
             elif args.table_output_format == "html":
                 table_text = table.to_html_str()
 
-            # Flip y-coordinates to match the top-left origin system
-            # FIXME: incorporate padding into bbox
-            fy0 = page.rect.height - table_bbox.bbox[3]
-            fy1 = page.rect.height - table_bbox.bbox[1]
+            # Flip y-coordinates AND remove .bbox
+            fy0 = page.rect.height - table_bbox[3] # <-- Use index
+            fy1 = page.rect.height - table_bbox[1] # <-- Use index
 
             table_elem = TableElement(
                 bbox=Bbox(
                     page=page_num,
-                    x0=table_bbox.bbox[0],
+                    x0=table_bbox[0], # <-- Use index
                     y0=fy0,
-                    x1=table_bbox.bbox[2],
+                    x1=table_bbox[2], # <-- Use index
                     y1=fy1,
                     page_width=page.rect.width,
                     page_height=page.rect.height,

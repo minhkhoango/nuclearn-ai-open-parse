@@ -1,11 +1,11 @@
-from openparse.tables.table_transformers.schemas import _TableCellModelOutput
+from openparse.tables.table_transformers.schemas import TableCellModelOutput
 
 # from src.tables.schemas import _TableCellModelOutput
 
 
 # evals/data/tables/naic-numerical-list-of-companies-page-94.pdf
 sample_get_table_content_output = [
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9939164519309998,
         bbox=(
@@ -15,7 +15,7 @@ sample_get_table_content_output = [
             424.6131758256392,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9996691942214966,
         bbox=(
@@ -25,7 +25,7 @@ sample_get_table_content_output = [
             506.47007890181106,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.99506676197052,
         bbox=(
@@ -35,7 +35,7 @@ sample_get_table_content_output = [
             176.68047471479935,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9961244463920593,
         bbox=(
@@ -45,7 +45,7 @@ sample_get_table_content_output = [
             391.70527787642044,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9988767504692078,
         bbox=(
@@ -55,7 +55,7 @@ sample_get_table_content_output = [
             519.6490339799361,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9969657063484192,
         bbox=(
@@ -65,7 +65,7 @@ sample_get_table_content_output = [
             519.9760298295455,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9950108528137207,
         bbox=(
@@ -75,7 +75,7 @@ sample_get_table_content_output = [
             408.2126936479048,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9994648098945618,
         bbox=(
@@ -85,7 +85,7 @@ sample_get_table_content_output = [
             519.731522993608,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9994288086891174,
         bbox=(
@@ -95,7 +95,7 @@ sample_get_table_content_output = [
             342.2242598100142,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9953063130378723,
         bbox=(
@@ -105,7 +105,7 @@ sample_get_table_content_output = [
             160.27500291304153,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9981030225753784,
         bbox=(
@@ -115,7 +115,7 @@ sample_get_table_content_output = [
             143.69812150435013,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9999344348907471,
         bbox=(
@@ -125,7 +125,7 @@ sample_get_table_content_output = [
             519.4698347611861,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9996514320373535,
         bbox=(
@@ -135,7 +135,7 @@ sample_get_table_content_output = [
             226.38141007856888,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9987955093383789,
         bbox=(
@@ -145,7 +145,7 @@ sample_get_table_content_output = [
             292.8090986772017,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9938255548477173,
         bbox=(
@@ -155,7 +155,7 @@ sample_get_table_content_output = [
             441.19603105024856,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9993770718574524,
         bbox=(
@@ -165,7 +165,7 @@ sample_get_table_content_output = [
             242.9812483354048,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9996106028556824,
         bbox=(
@@ -175,7 +175,7 @@ sample_get_table_content_output = [
             193.39771409468216,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.999058187007904,
         bbox=(
@@ -185,7 +185,7 @@ sample_get_table_content_output = [
             490.56614823774856,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.999068558216095,
         bbox=(
@@ -195,7 +195,7 @@ sample_get_table_content_output = [
             259.6156630082564,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9995618462562561,
         bbox=(
@@ -205,7 +205,7 @@ sample_get_table_content_output = [
             209.94493241743606,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9995167255401611,
         bbox=(
@@ -215,7 +215,7 @@ sample_get_table_content_output = [
             308.8550428910689,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9995043277740479,
         bbox=(
@@ -225,7 +225,7 @@ sample_get_table_content_output = [
             123.37710710005325,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9793805480003357,
         bbox=(
@@ -235,7 +235,7 @@ sample_get_table_content_output = [
             519.3316511674361,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9991280436515808,
         bbox=(
@@ -245,7 +245,7 @@ sample_get_table_content_output = [
             358.4926008744673,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9999399185180664,
         bbox=(
@@ -255,7 +255,7 @@ sample_get_table_content_output = [
             519.495927290483,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9976800084114075,
         bbox=(
@@ -265,7 +265,7 @@ sample_get_table_content_output = [
             519.2454695268111,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column header",
         confidence=0.9989497065544128,
         bbox=(
@@ -275,7 +275,7 @@ sample_get_table_content_output = [
             123.22541184858841,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9968582391738892,
         bbox=(
@@ -285,7 +285,7 @@ sample_get_table_content_output = [
             375.10054154829544,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table column",
         confidence=0.9961622953414917,
         bbox=(
@@ -295,7 +295,7 @@ sample_get_table_content_output = [
             519.362382368608,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9984205961227417,
         bbox=(
@@ -305,7 +305,7 @@ sample_get_table_content_output = [
             474.10359330610794,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9983760118484497,
         bbox=(
@@ -315,7 +315,7 @@ sample_get_table_content_output = [
             275.8905958695845,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.9978849291801453,
         bbox=(
@@ -325,7 +325,7 @@ sample_get_table_content_output = [
             457.64375443892044,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table spanning cell",
         confidence=0.9597509503364563,
         bbox=(
@@ -335,7 +335,7 @@ sample_get_table_content_output = [
             516.4211592240767,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table row",
         confidence=0.99912029504776,
         bbox=(
@@ -345,7 +345,7 @@ sample_get_table_content_output = [
             325.1110243363814,
         ),
     ),
-    _TableCellModelOutput(
+    TableCellModelOutput(
         label="table",
         confidence=0.9999959468841553,
         bbox=(

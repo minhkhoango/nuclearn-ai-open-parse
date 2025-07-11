@@ -11,7 +11,7 @@ Size = Tuple[int, int]
 BBox = Tuple[float, float, float, float]
 
 
-class _TableCellModelOutput(BaseModel):
+class TableCellModelOutput(BaseModel):
     label: Literal[
         "table spanning cell",
         "table row",
@@ -36,13 +36,13 @@ class _TableCellModelOutput(BaseModel):
         return self.label in ["table column"]
 
 
-class _TableModelOutput(BaseModel):
-    label: Literal["table", "table rotated"]
-    confidence: float
-    bbox: BBox  # note: image coordinates
+# class _TableModelOutput(BaseModel):
+#     label: Literal["table", "table rotated"]
+#     confidence: float
+#     bbox: BBox  # note: image coordinates
 
 
-class _TableHeaderCell(BaseModel):
+class TableHeaderCell(BaseModel):
     bbox: BBox
     content: Optional[str] = None
     variant: Literal["header"] = "header"
@@ -53,7 +53,7 @@ class _TableHeaderCell(BaseModel):
         return values
 
 
-class _TableDataCell(BaseModel):
+class TableDataCell(BaseModel):
     bbox: BBox
     content: Optional[str] = None
     variant: Literal["data"] = "data"
@@ -64,8 +64,8 @@ class _TableDataCell(BaseModel):
         return values
 
 
-class _TableHeader(BaseModel):
-    cells: List[_TableHeaderCell]
+class TableHeader(BaseModel):
+    cells: List[TableHeaderCell]
 
     def sort_cells(self) -> None:
         self.cells.sort(key=lambda cell: (cell.bbox[1], cell.bbox[0]))
@@ -79,8 +79,8 @@ class _TableHeader(BaseModel):
         return (x0, y0, x1, y1)
 
 
-class _TableRow(BaseModel):
-    cells: List[_TableDataCell]
+class TableRow(BaseModel):
+    cells: List[TableDataCell]
 
     def sort_cells(self) -> None:
         self.cells.sort(key=lambda cell: (cell.bbox[1], cell.bbox[0]))
@@ -94,10 +94,10 @@ class _TableRow(BaseModel):
         return (x0, y0, x1, y1)
 
 
-class _Table(BaseModel):
+class Table(BaseModel):
     bbox: BBox
-    headers: List[_TableHeader]
-    rows: List[_TableRow]
+    headers: List[TableHeader]
+    rows: List[TableRow]
 
     ###################
     ### TABLE UTILS ###
@@ -137,7 +137,7 @@ class _Table(BaseModel):
 
     def _generate_row_str(
         self,
-        cells: Sequence[Union[_TableHeaderCell, _TableDataCell]],
+        cells: Sequence[Union[TableHeaderCell, TableDataCell]],
         column_widths: List[int],
     ) -> str:
         """
