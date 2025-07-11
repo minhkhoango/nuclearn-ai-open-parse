@@ -120,9 +120,10 @@ def _ingest_with_table_transformers(
 
     tables = []
     for page_num, table_bboxes in pages_with_tables.items():
-        page: fitz.Page = pdoc[page_num]
-        page_dims: Tuple[float, float] = (page.rect.width, page.rect.height)
-        
+-from typing import List, Literal, Union
++from typing import List, Literal, Union, Tuple
++
++import fitz
         # The 'table_bbox' variable here IS the tuple, e.g., (x0, y0, x1, y1)
         for table_bbox in table_bboxes:
             
