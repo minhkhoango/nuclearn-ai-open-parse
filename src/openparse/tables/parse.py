@@ -7,6 +7,7 @@ from openparse.schemas import Bbox, TableElement
 from openparse.tables.utils import adjust_bbox_with_padding, crop_img_with_padding
 
 from . import pymupdf
+import fitz
 
 
 class ParsingArgs(BaseModel):
