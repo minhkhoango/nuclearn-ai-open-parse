@@ -1,4 +1,4 @@
-from typing import List, Literal, Union
+from typing import List, Literal, Union, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -175,9 +175,10 @@ def _ingest_with_unitable(
     verbose: bool = False,
 ) -> List[TableElement]:
     try:
+        from openparse.config import config
         from openparse.tables.utils import doc_to_imgs
 
-        from .table_transformers.ml import find_table_bboxes
+        from .table_transformers.ml import TableDetector
         from .unitable.core import table_img_to_html
 
     except ImportError as e:
@@ -185,20 +186,30 @@ def _ingest_with_unitable(
             "Table detection and extraction requires the `torch`, `torchvision` and `transformers` libraries to be installed.",
             e,
         ) from e
-    pdoc = doc.to_pymupdf_doc()  # type: ignore
+    table_detector = TableDetector(
+        model_id="TahaDouaji/detr-doc-table-detection", device=config.get_device()
+    )
+
+    pdoc = doc.to_pymupdf_doc()
     pdf_as_imgs = doc_to_imgs(pdoc)
 
     pages_with_tables = {}
     for page_num, img in enumerate(pdf_as_imgs):
-        pages_with_tables[page_num] = find_table_bboxes(img, args.min_table_confidence)
+        # CORRECTED: Use the new detector
+        pages_with_tables[page_num] = table_detector.detect(
+            img, args.min_table_confidence
+        )
 
     tables = []
     for page_num, table_bboxes in pages_with_tables.items():
         page = pdoc[page_num]
+        # The 'table_bbox' variable IS the tuple now.
         for table_bbox in table_bboxes:
             padding_pct = 0.05
+
+            # CORRECTED: Removed the incorrect .bbox accessor
             padded_bbox = adjust_bbox_with_padding(
-                bbox=table_bbox.bbox,
+                bbox=table_bbox,
                 page_width=page.rect.width,
                 page_height=page.rect.height,
                 padding_pct=padding_pct,
@@ -207,7 +218,6 @@ def _ingest_with_unitable(
 
             table_str = table_img_to_html(table_img)
 
-            # Flip y-coordinates to match the top-left origin system
             fy0 = page.rect.height - padded_bbox[3]
             fy1 = page.rect.height - padded_bbox[1]
 

@@ -40,7 +40,6 @@ from .schemas import (
 # ================================
 t0: float = time.time()
 device: Literal['cuda'] | Literal['cpu'] = config.get_device()
-Size = Tuple[int, int]
 
 
 # ==========================
