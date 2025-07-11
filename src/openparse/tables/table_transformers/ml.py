@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Tuple, Literal
+from typing import Any, Dict, List, Literal
 
 import torch  # type: ignore
 from PIL import Image  # type: ignore
