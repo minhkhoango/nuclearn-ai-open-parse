@@ -1,6 +1,7 @@
 -r requirements.txt
 -r requirements-docs.txt
 pytest
+pytest_mock
 ruff
 mypy 
 mypy-extensions

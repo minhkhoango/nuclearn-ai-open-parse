@@ -1,0 +1,3 @@
+### Changed
+- **Upgraded Default Table Detection Model:** Switched the default table detection model to `TahaDouaji/detr-doc-table-detection` for significantly improved performance on complex documents.
+- **Adjusted Default Confidence Threshold:** Lowered the default `min_table_confidence` from 0.75 to 0.70. This new threshold is optimized for the new model, providing a better balance between recall and precision.

@@ -177,7 +177,7 @@ You can run the parsing with the following.
 parser = openparse.DocumentParser(
         table_args={
             "parsing_algorithm": "unitable",
-            "min_table_confidence": 0.8,
+            "min_table_confidence": 0.7,
         },
 )
 parsed_nodes = parser.parse(pdf_path)

@@ -43,7 +43,7 @@ class UnitableArgs(BaseModel):
         default="TahaDouaji/detr-doc-table-detection",
         description="The HuggingFace model ID for the table detection model.",
     )
-    min_table_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+    min_table_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
     table_output_format: Literal["html"] = Field(default="html")
 
     model_config = ConfigDict(extra="forbid")
@@ -124,11 +124,9 @@ def _ingest_with_table_transformers(
         pages_with_tables[page_num] = table_detector.detect(img, args.min_table_confidence)
 
     tables = []
-    page: fitz.Page = pdoc[page_num]
-    page_dims: Tuple[float, float] = (page.rect.width, page.rect.height)
-
     for page_num, table_bboxes in pages_with_tables.items():
-
+        page: fitz.Page = pdoc[page_num]
+        page_dims: Tuple[float, float] = (page.rect.width, page.rect.height)
         # The 'table_bbox' variable here IS the tuple, e.g., (x0, y0, x1, y1)
         for table_bbox in table_bboxes:
             
