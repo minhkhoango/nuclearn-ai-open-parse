@@ -52,10 +52,10 @@ class TableDetector:
     
     model: AutoModelForObjectDetection
     processor: AutoImageProcessor
-    device: str
+    device: torch.device | str
     
-    def __init__(self, model_id: str, device: str) -> None:
-        self.device: str = device
+    def __init__(self, model_id: str, device: torch.device | str) -> None:
+        self.device = device
         print(f"Loading table detection model: {model_id}")
         self.processor = AutoImageProcessor.from_pretrained(model_id)
         self.model = AutoModelForObjectDetection.from_pretrained(model_id).to(self.device)

@@ -39,6 +39,10 @@ class PyMuPDFArgs(BaseModel):
 
 class UnitableArgs(BaseModel):
     parsing_algorithm: Literal["unitable"] = Field(default="unitable")
+    detection_model_id: str = Field(
+        default="TahaDouaji/detr-doc-table-detection",
+        description="The HuggingFace model ID for the table detection model.",
+    )
     min_table_confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     table_output_format: Literal["html"] = Field(default="html")
 
@@ -187,7 +191,7 @@ def _ingest_with_unitable(
             e,
         ) from e
     table_detector = TableDetector(
-        model_id="TahaDouaji/detr-doc-table-detection", device=config.get_device()
+        model_id=args.detection_model_id, device=config.get_device()
     )
 
     pdoc = doc.to_pymupdf_doc()
