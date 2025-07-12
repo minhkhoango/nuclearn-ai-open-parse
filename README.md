@@ -177,6 +177,8 @@ You can run the parsing with the following.
 parser = openparse.DocumentParser(
         table_args={
             "parsing_algorithm": "unitable",
+            # new SOTA detector introduced in this PR
+            "detection_model_id": "TahaDouaji/detr-doc-table-detection",
             "min_table_confidence": 0.7,
         },
 )
